@@ -1,0 +1,14 @@
+openai:
+  model_name: gpt-3.5-turbo
+  embedding_model: text-embedding-3-small
+pdf:
+  path: data/resource.pdf
+chunking:
+  max_length: 1000
+  overlap_length: 200
+vector_store:
+  path: data/vector_store
+retriever:
+  top_k: 5
+logging:
+  level: INFO

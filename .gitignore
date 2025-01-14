@@ -1,0 +1,5 @@
+.env
+venv
+src\models\__pycache__
+src\quiz\__pycache__
+src\utils\__pycache__
