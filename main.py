@@ -22,8 +22,7 @@ def main():
     
     if os.path.exists(vector_store_name):
         logger.info("Loading existing vector store...")
-        first_embedding = llm.get_embedding([chunks[0]])
-        vector_store = VectorStore(dimension=len(first_embedding))
+        vector_store = VectorStore(384)
         vector_store.load(vector_store_name)
         logger.info("Vector store loaded successfully")
 
@@ -69,14 +68,29 @@ def main():
 
     # Interactive quiz generation loop
     while True:
-        query = input("\nEnter a topic or question (or 'quit' to exit): ")
-        if query.lower() == 'quit':
-            break
+        quiz_type = input("\nChoose a quiz type (multiple_choice, true_false, fill_the_blank): ")
+        if quiz_type not in ["multiple_choice", "true_false", "fill_the_blank"]:
+            logger.warning("Invalid quiz type")
+            continue
+
+        context = input("Enter a topic for generate question: ")
+
+        category = input("Enter a category: ")
+
+        level = input("Enter a level (C1-C6): ")
+        if level not in ["C1", "C2", "C3", "C4", "C5", "C6"]:
+            logger.warning("Invalid level")
+            continue
+
+        num_questions = int(input("Enter the number of questions to generate: "))
+        if num_questions not in range(1, 11):
+            logger.warning("Number of questions must be between 1 and 10")
+            continue
 
         # Retrieve and generate questions
         logger.info("Retrieving quiz questions...")
         retriever = Retriever(vector_store, llm)
-        relevant_contexts = retriever.retrieve(query, top_k=config['retriever']['top_k'])
+        relevant_contexts = retriever.retrieve(context, top_k=config['retriever']['top_k'])
 
         if not relevant_contexts:
             logger.warning("No relevant contexts found")
@@ -84,15 +98,23 @@ def main():
 
         # Generate quiz questions
         logger.info("Generating quiz questions...")
-        quiz_generator = QuizGenerator(llm)
+        quiz_generator = QuizGenerator(
+            llm = llm,
+            quiz_type = quiz_type,
+            context = relevant_contexts,
+            category = category,
+            level = level,
+            num_questions = num_questions
+        )
+        print(quiz_generator.generate())
         
-        for context, score in relevant_contexts:
-            print(f"\nGenerating question (relevance score: {score:.2f})...")
-            try:
-                question = quiz_generator.generate(context)
-                print(f"Question: {question}\n")
-            except Exception as e:
-                logger.error(f"Error generating question: {e}")
+        # for context, score in relevant_contexts:
+        #     print(f"\nGenerating question (relevance score: {score:.2f})...")
+        #     try:
+        #         question = quiz_generator.generate(context)
+        #         print(f"Question: {question}\n")
+        #     except Exception as e:
+        #         logger.error(f"Error generating question: {e}")
 
         print("\n" + "="*50)
 
