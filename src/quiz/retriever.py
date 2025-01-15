@@ -3,6 +3,9 @@ class Retriever:
         self.vector_store = vector_store
         self.llm = llm
 
-    def retrieve(self, prompt: str, top_k: int = 5) -> list[tuple[str, float]]:
+    def retrieve(self, prompt: str, top_k: int = 5) -> str:
         embedding = self.llm.get_embedding([prompt])
-        return self.vector_store.search(embedding, top_k)
+        results = self.vector_store.search(embedding, top_k)
+        combined_result = " ".join([result[0] for result in results])
+
+        return combined_result

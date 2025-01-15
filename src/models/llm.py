@@ -8,15 +8,13 @@ class LLM:
             api_key=api_key
         )
 
-    def generate_text(self, prompt: str, max_tokens: int = 50, temperature: float = 0.5) -> str:
+    def generate_text(self, prompt: str, prompt_system) -> str:
         response = self.client.chat.completions.create(
             model=self.model_name,
             messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": prompt_system},
                 {"role": "user", "content": prompt}
-            ],
-            max_tokens=max_tokens,
-            temperature=temperature
+            ]
         )
         return response.choices[0].message.content.strip()
     
