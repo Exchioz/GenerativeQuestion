@@ -72,7 +72,11 @@ class QuizGenerator:
         Konteks: {self.context}
         Kategori: {self.category}
         Level: {self.level}
-        Format CSV: "Question","Option A","Option B","Option C","Option D","Answer","Category","Level"
+        Format output yang diharapkan adalah **CSV** dengan header yang benar sebagai berikut:
+        "Question","Option A","Option B","Option C","Option D","Answer","Category","Level"
+        
+        Jangan pernah keluar dari struktur atau format yang telah ditentukan. Jika output tidak sesuai dengan format, ulangi proses pembuatan soal hingga sesuai dengan format yang benar.
+        Tugas Anda adalah menghasilkan soal berdasarkan informasi yang diberikan dan memastikan bahwa output selalu mengikuti format yang ketat dan konsisten.
         """
     
     def _generate_true_false_question(self) -> str:
@@ -81,7 +85,11 @@ class QuizGenerator:
         Konteks: {self.context}
         Kategori: {self.category}
         Level: {self.level}
-        Format CSV: "Question","Answer","Category","Level"
+        Format output yang diharapkan adalah **CSV** dengan header yang benar sebagai berikut:
+        "Question","Answer","Category","Level"
+        
+        Jangan pernah keluar dari struktur atau format yang telah ditentukan. Jika output tidak sesuai dengan format, ulangi proses pembuatan soal hingga sesuai dengan format yang benar.
+        Tugas Anda adalah menghasilkan soal berdasarkan informasi yang diberikan dan memastikan bahwa output selalu mengikuti format yang ketat dan konsisten.
         """
     
     def _generate_fill_the_blank_question(self) -> str:
@@ -90,5 +98,9 @@ class QuizGenerator:
         Konteks: {self.context}
         Kategori: {self.category}
         Level: {self.level}
-        Format CSV: "Question","Answer","Category","Level"
+        Format output yang diharapkan adalah **CSV** dengan header yang benar sebagai berikut:
+        "Question","Answer","Category","Level"
+
+        Jangan pernah keluar dari struktur atau format yang telah ditentukan. Jika output tidak sesuai dengan format, ulangi proses pembuatan soal hingga sesuai dengan format yang benar.
+        Tugas Anda adalah menghasilkan soal berdasarkan informasi yang diberikan dan memastikan bahwa output selalu mengikuti format yang ketat dan konsisten.
         """ 

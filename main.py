@@ -6,117 +6,123 @@ from src.models.vector_store import VectorStore
 from src.quiz.generator import QuizGenerator
 from src.quiz.retriever import Retriever
 
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from dotenv import load_dotenv
+from pathlib import Path
+import shutil
 import os
 
-def main():
-    # Setup
-    config = ConfigLoader.load_config("data/config.yml")
-    logger = setup_logger("QuizApp", level=config['logging']['level'])
-    load_dotenv()
-    llm = LLM(model_name=config['openai']['model_name'], embedding_model=config['openai']['embedding_model'], api_key=os.getenv("OPENAI_API_KEY"))
+load_dotenv()
+app = FastAPI()
+reource_path = "./data/resource"
+config = ConfigLoader.load_config("data/config.yml")
+logger = setup_logger("QuizApp", level=config['logging']['level'])
+llm = LLM(
+    model_name=config['openai']['model_name'], 
+    embedding_model=config['openai']['embedding_model'],
+    api_key=os.getenv("OPENAI_API_KEY")
+)
 
-    # Check if vector store exists
-    vector_store_name = config['vector_store']['path']
-    vector_store = None
+@app.post("/upload_resouce")
+def upload_resource(file: UploadFile = File(...), resource_name: str = Form(...)):
+    if not resource_name:
+        logger.error("Resource name is required")
+        raise HTTPException(400, "Resource name is required")
     
-    if os.path.exists(vector_store_name):
-        logger.info("Loading existing vector store...")
-        vector_store = VectorStore(384)
-        vector_store.load(vector_store_name)
-        logger.info("Vector store loaded successfully")
+    folder_path = Path(reource_path) / resource_name
+    # if folder_path.exists():
+    #     logger.error(f"Resource {resource_name} already exists")
+    #     raise HTTPException(400, f"Resource {resource_name} already exists")
+    
+    folder_path.mkdir(parents=True, exist_ok=True)
+    resource_loc = folder_path / resource_name
+    pdf_path = f"{resource_loc}.pdf"
 
-    # If no vector store exists or loading failed, create new one
-    if vector_store is None:
-        # Extract text from PDF
-        logger.info("Extracting text from PDF...")
-        raw_text = PDFProcessor.extract_text(config['pdf']['path'])
-        paragraphs = PDFProcessor.preprocess_text(raw_text)
+    try:
+        logger.info(f"Uploading {resource_name}...")
+        with open(pdf_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+    except Exception as e:
+        logger.error(f"Failed to save file: {e}")
+        raise HTTPException(500, f"Failed to save file: {e}")
+    
+    logger.info(f"Extracting text from {resource_name}...")
+    raw_text = PDFProcessor.extract_text(pdf_path)
+    paragraphs = PDFProcessor.preprocess_text(raw_text)
+    
+    logger.info("Chunking text...")
+    chunks = []
+    for paragraph in paragraphs:
+        chunks.extend(PDFProcessor.chunk_text(
+            paragraph, 
+            max_length=config['chunking']['max_length'], 
+            overlap_length=config['chunking']['overlap_length']
+        ))
+    
+    logger.info("Creating VectorStore...")
+    first_embedding = llm.get_embedding([chunks[0]])
+    vector_store = VectorStore(dimension=len(first_embedding))
+    
+    logger.info(f"Processing {len(chunks)} chunks...")
+    for i, chunk in enumerate(chunks, 1):
+        embedding = llm.get_embedding([chunk])
+        vector_store.add(embedding, chunk)
+        if i % 10 == 0:
+            logger.info(f"Processed {i}/{len(chunks)} chunks")
+    
+    logger.info("Saving VectorStore...")
+    try:
+        vector_store.save(str(resource_loc).replace("\\", "/")+resource_name)
+        logger.info("VectorStore saved successfully")
+        return {"status": 200, "message": "Resource uploaded and processed successfully"}
+    except Exception as e:
+        logger.error(f"Error saving VectorStore: {e}")
+        raise HTTPException(500, f"Failed to save VectorStore: {e}")
 
-        # Chunk text
-        logger.info("Chunking text...")
-        chunks = []
-        for paragraph in paragraphs:
-            chunks.extend(PDFProcessor.chunk_text(
-                paragraph, 
-                max_length=config['chunking']['max_length'], 
-                overlap_length=config['chunking']['overlap_length']
-            ))
 
-        # Create VectorStore
-        logger.info("Creating VectorStore...")
-        
-        # Get dimension from first embedding
-        first_embedding = llm.get_embedding([chunks[0]])
-        vector_store = VectorStore(dimension=len(first_embedding))
+@app.post("/generate_question")
+async def generate(quiz_type: str, resource_name: str, context: str, level: str, num_questions: int):
+    if quiz_type not in ["multiple", "true_false", "fill_the_blank"]:
+        logger.error(f"Invalid quiz type: {quiz_type}")
+        raise HTTPException(400, "Invalid quiz type")
+    if level not in ["C1", "C2", "C3", "C4", "C5", "C6"]:
+        logger.error(f"Invalid level: {level}")
+        raise HTTPException(400, "Invalid level")
+    if num_questions in range(1, 11):
+        logger.error(f"Number of questions must be between 1 and 10: {num_questions}")
+        raise HTTPException(400, "Number of questions must be greater than 0")
+    if not resource_name:
+        logger.error("Resource name is required")
+        raise HTTPException(400, "Resource name is required")
+    if not context:
+        logger.error("Context is required")
+        raise HTTPException(400, "Context is required")
+    
+    logger.info(f"Retrieving VectorStore for {resource_name}...")
+    vector_store = VectorStore(384)
+    vector_store.load(resource_name)
+    logger.info("Vector store loaded successfully")
 
-        # Process chunks
-        logger.info(f"Processing {len(chunks)} chunks...")
-        for i, chunk in enumerate(chunks, 1):
-            embedding = llm.get_embedding([chunk])
-            vector_store.add(embedding, chunk)
-            if i % 10 == 0:
-                logger.info(f"Processed {i}/{len(chunks)} chunks")
+    logger.info("Retrieving quiz questions...")
+    retriever = Retriever(vector_store, llm)
+    relevant_contexts = retriever.retrieve(context, top_k=config['retriever']['top_k'])
+    if not relevant_contexts:
+        logger.error("No relevant contexts found")
+        raise HTTPException(400,"No relevant contexts found")
+    
+    logger.info("Generating quiz questions...")
+    quiz_generator = QuizGenerator(
+        llm = llm,
+        quiz_type = quiz_type,
+        context = relevant_contexts,
+        category = resource_name,
+        level = level,
+        num_questions = num_questions
+    )
 
-        # Save vector store
-        logger.info("Saving VectorStore...")
-        try:
-            vector_store.save(vector_store_name)
-            logger.info("VectorStore saved successfully")
-        except Exception as e:
-            logger.error(f"Error saving VectorStore: {e}")
+    prompt = quiz_generator.generate_prompt()
+    return {"prompt": prompt}
 
-    # Interactive quiz generation loop
-    while True:
-        quiz_type = input("\nChoose a quiz type (multiple_choice, true_false, fill_the_blank): ")
-        if quiz_type not in ["multiple_choice", "true_false", "fill_the_blank"]:
-            logger.warning("Invalid quiz type")
-            continue
-
-        context = input("Enter a topic for generate question: ")
-
-        category = input("Enter a category: ")
-
-        level = input("Enter a level (C1-C6): ")
-        if level not in ["C1", "C2", "C3", "C4", "C5", "C6"]:
-            logger.warning("Invalid level")
-            continue
-
-        num_questions = int(input("Enter the number of questions to generate: "))
-        if num_questions not in range(1, 11):
-            logger.warning("Number of questions must be between 1 and 10")
-            continue
-
-        # Retrieve and generate questions
-        logger.info("Retrieving quiz questions...")
-        retriever = Retriever(vector_store, llm)
-        relevant_contexts = retriever.retrieve(context, top_k=config['retriever']['top_k'])
-
-        if not relevant_contexts:
-            logger.warning("No relevant contexts found")
-            continue
-
-        # Generate quiz questions
-        logger.info("Generating quiz questions...")
-        quiz_generator = QuizGenerator(
-            llm = llm,
-            quiz_type = quiz_type,
-            context = relevant_contexts,
-            category = category,
-            level = level,
-            num_questions = num_questions
-        )
-        print(quiz_generator.generate())
-        
-        # for context, score in relevant_contexts:
-        #     print(f"\nGenerating question (relevance score: {score:.2f})...")
-        #     try:
-        #         question = quiz_generator.generate(context)
-        #         print(f"Question: {question}\n")
-        #     except Exception as e:
-        #         logger.error(f"Error generating question: {e}")
-
-        print("\n" + "="*50)
-
-if __name__ == "__main__":
-    main()
+@app.get("/")
+def root():
+    return {"message": "Welcome to QuizApp!"}
