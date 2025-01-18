@@ -5,6 +5,7 @@ from src.models.llm import LLM
 from src.models.vector_store import VectorStore
 from src.quiz.generator import QuizGenerator
 from src.quiz.retriever import Retriever
+from src.utils.db_handler import DBHandler
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
@@ -131,6 +132,8 @@ async def generate(question: QuizRequest):
         logger.error("No relevant contexts found")
         raise HTTPException(400,"No relevant contexts found")
     
+    print(relevant_contexts)
+    
     logger.info("Generating quiz questions...")
     quiz_generator = QuizGenerator(
         llm = llm,
@@ -141,10 +144,31 @@ async def generate(question: QuizRequest):
         num_questions = question.num_questions
     )
 
-    prompt = quiz_generator.make_question()
-    print(prompt)
-    return {"prompt": prompt}
+    output = quiz_generator.make_question()
+    logger.info("Quiz questions generated successfully")
+    print(output)
 
+    if not isinstance(output, dict):
+        logger.error("Failed to generate quiz questions")
+        raise HTTPException(500, "Failed to generate quiz questions")
+    
+    logger.info("Adding the question to DB...")
+    db_handler = DBHandler(
+        host=config['database']['host'],
+        user=config['database']['user'],
+        password=config['database']['password'],
+        database=config['database']['database']
+    )
+    try:
+        db_handler.connect()
+        db_handler.add_question(output)
+        db_handler.close()
+        logger.info("Quiz questions added to DB successfully")
+        return {"message": "Quiz questions generated and added to DB successfully"}
+    except Exception as e:
+        logger.error(f"Failed to add question to DB: {e}")
+        raise HTTPException(500, f"Failed to add question to DB: {e}")
+    
 @app.get("/")
 def root():
     return {"message": "Welcome to QuizApp!"}
