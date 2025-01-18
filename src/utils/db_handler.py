@@ -25,8 +25,15 @@ class DBHandler:
         if self.connection.is_connected():
             self.connection.close()
 
-    def add_resource(self, resource_data: dict) -> None:
-        pass
+    def add_resource(self, resource_name: str, resource_path) -> None:
+        query = "INSERT INTO resources (resource_name, resource_path, created_at) VALUES (%s, %s, NOW())"
+        values = (resource_name, resource_path)
+
+        cursor = self.connection.cursor()
+        cursor.execute(query, values)
+        self.connection.commit()
+        cursor.close()
+        return {"message": "Resource added successfully"}
     
     def add_question(self, question_data: dict) -> None:
         get_type = list(question_data.keys())[0]

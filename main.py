@@ -89,9 +89,21 @@ async def upload_resource(file: UploadFile = File(...), resource_name: str = For
     
     logger.info("Saving VectorStore...")
     try:
-        vector_store_dir = str(resource_loc).replace("\\", "/")+resource_name
+        vector_store_dir = str(resource_loc).replace("\\", "/")
         vector_store.save(vector_store_dir)
-        logger.info("VectorStore saved successfully")
+        logger.info("VectorStore saved locally")
+
+        db_handler = DBHandler(
+            host=config['database']['host'],
+            user=config['database']['user'],
+            password=config['database']['password'],
+            database=config['database']['database']
+        )
+        db_handler.connect()
+        db_handler.add_resource(resource_name, vector_store_dir)
+        db_handler.close()
+        logger.info("Resource added to DB successfully")
+
         return {"message": "Resource uploaded and processed successfully"}
     except Exception as e:
         logger.error(f"Error saving VectorStore: {e}")
