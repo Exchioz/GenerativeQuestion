@@ -2,8 +2,8 @@ openai:
   model_name: gpt-4o-mini
   embedding_model: text-embedding-3-small
 chunking:
-  max_length: 500
-  overlap_length: 100
+  max_length: 750
+  overlap_length: 150
 retriever:
   top_k: 3
 database:

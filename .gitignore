@@ -7,4 +7,6 @@ src\quiz\__pycache__\
 src\utils\__pycache__\
 
 db.sql
-main_py.py
+test.py
+
+data/resources/*
