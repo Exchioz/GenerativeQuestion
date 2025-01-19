@@ -1,15 +1,13 @@
 import re
-import fitz
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 class PDFProcessor:
     @staticmethod
     def extract_text(file_path: str) -> str:
-        text = ''
-        with fitz.open(file_path) as pdf:
-            for page in pdf:
-                text += page.get_text()
-        return text
+        pdf_loader = PyPDFLoader(file_path)
+        docs = pdf_loader.load()
+        return "\n".join([doc.page_content for doc in docs])
 
     @staticmethod
     def preprocess_text(text: str) -> list[str]:

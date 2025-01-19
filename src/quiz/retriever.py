@@ -1,11 +1,14 @@
+import numpy as np
+
 class Retriever:
-    def __init__(self, vector_store, llm):
+    def __init__(self, vector_store, embed):
+        self.embed = embed
         self.vector_store = vector_store
-        self.llm = llm
+    
+    def retrieve(self, query:str, top_k: int) -> str:
+        if not self.vector_store:
+            raise ValueError("Vector store is not initialized or empty")
+        results = self.vector_store.similarity_search(query,k=top_k)
+        retrieved_texts = [doc.page_content for doc in results]
 
-    def retrieve(self, prompt: str, top_k: int = 5) -> str:
-        embedding = self.llm.get_embedding([prompt])
-        results = self.vector_store.search(embedding, top_k)
-        combined_result = " ".join([result[0] for result in results])
-
-        return combined_result
+        return " ".join(retrieved_texts)

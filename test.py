@@ -1,5 +1,11 @@
 from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 class MultipleQuestion(BaseModel):
     question: str = Field(..., description="Question to generate")
@@ -33,67 +39,17 @@ class QuizGenerator:
         self.num_questions = num_questions
         self.parser = self._get_parser()
 
-    def make_question(self):
-        if not self.parser:
-            raise ValueError("Invalid quiz type")
-        
-        query = f"""
-        Anda adalah asisten AI yang sangat andal, cerdas, dan berpengalaman dalam membuat soal berbasis informasi tertentu.
-        Buatkan {self.num_questions} soal {self.quiz_type.replace('_', ' ')} dengan konteks berikut:
-        <start>
-        {self.context}
-        <end>
-        Kategori: {self.category}
-
-        Tingkat dalam Taxonomy Bloom ({self.level}):
-        {self._get_level_info()}
-
-        {self.parser.get_format_instructions()}
-        {self._get_rules()}
-        """
-        
-        return self.llm.generate_question(query, self.parser)
-    
-    def _get_level_info(self) -> dict:
-        level_info = {
-            "C1": """
-            - Memeriksa dan mengevaluasi
-            - Tugas yang harus dilakukan: Menganalisis, Mengevaluasi, Membuat keputusan
-            """,
-            "C2": """
-            - Membuat model
-            - Tugas yang harus dilakukan: Mengorganisir, Menggabungkan, Merancang
-            """,
-            "C3": """
-            - Menghasilkan
-            - Tugas yang harus dilakukan: Membuat, Menghasilkan, Mengembangkan
-            """,
-            "C4": """
-            - Memahami
-            - Tugas yang harus dilakukan: Menjelaskan, Meringkas, Mengidentifikasi
-            """,
-            "C5": """
-            - Mengingat
-            - Tugas yang harus dilakukan: Mengingat, Mengenali, Mengulang
-            """,
-            "C6": """
-            - Mengenal
-            - Tugas yang harus dilakukan: Mengenal, Mengidentifikasi, Mengklasifikasikan
-            """
-        }
-        return level_info.get(self.level)
-    
-    def _get_parser(self) -> JsonOutputParser:
+    def _get_parser(self):
         parsers = {
-            "multiple_choices": JsonOutputParser(pydantic_object=MultipleQuestion),
+            "multiple": JsonOutputParser(pydantic_object=MultipleQuestion),
             "true_false": JsonOutputParser(pydantic_object=TrueFalseQuestion),
             "fill_the_blank": JsonOutputParser(pydantic_object=FillTheBlankQuestion),
         }
         return parsers.get(self.quiz_type)
-    
-    def _get_rules(self) -> str:
+
+    def _get_rules(self):
         rules = {
-            "multiple_choices": """
+            "multiple": """
             Aturan untuk soal Pilihan Ganda:
             1. Pertanyaan harus jelas dan mudah dipahami
             2. Semua opsi jawaban (A, B, C, D) harus masuk akal dan relevan
@@ -119,3 +75,74 @@ class QuizGenerator:
             """
         }
         return rules.get(self.quiz_type)
+    
+    def _get_level_info(self):
+        level_info = {
+            "C1": {
+                "description": "Memeriksa dan mengevaluasi",
+                "tasks": ["Menganalisis", "Mengevaluasi", "Membuat keputusan"]
+            },
+            "C2": {
+                "description": "Membuat model",
+                "tasks": ["Mengorganisir", "Menggabungkan", "Merancang"]
+            },
+            "C3": {
+                "description": "Menghasilkan",
+                "tasks": ["Membuat", "Menghasilkan", "Mengembangkan"]
+            },
+            "C4": {
+                "description": "Memahami",
+                "tasks": ["Menjelaskan", "Meringkas", "Mengidentifikasi"]
+            },
+            "C5": {
+                "description": "Mengingat",
+                "tasks": ["Mengingat", "Mengenali", "Mengulang"]
+            },
+            "C6": {
+                "description": "Mengenal",
+                "tasks": ["Mengenal", "Mengidentifikasi", "Mengklasifikasikan"]
+            }
+        }
+        return level_info.get(self.level)
+
+    def generate(self):
+        if not self.parser:
+            raise ValueError("Invalid quiz type")
+        
+        query = f"""
+        Buatkan {self.num_questions} soal {self.quiz_type.replace('_', ' ')} dengan konteks berikut:
+        <start>
+        {self.context}
+        <end>
+        Kategori: {self.category}
+
+        Tingkat dalam Taxonomy Bloom: {self.level}
+        - {self._get_level_info()['description']}
+        - Tugas yang harus dilakukan: {', '.join(self._get_level_info()['tasks'])}
+
+        {self.parser.get_format_instructions()}
+        {self._get_rules()}
+        """
+        
+        prompt = PromptTemplate(
+            template="Jawab pertanyaan pengguna.\n{format_instructions}\n{query}\n",
+            input_variables=["query"],
+            partial_variables={"format_instructions": self.parser.get_format_instructions()},
+        )
+        chain = prompt | self.llm | self.parser
+        print(query)
+        return chain.invoke({"query": query})
+
+
+model = ChatOpenAI(model_name="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))
+generate = QuizGenerator(
+    llm=model,
+    quiz_type="true_false",
+    context="Pada tahun 2019, Indonesia berhasil memperoleh medali emas di ajang SEA Games.",
+    category="Olahraga",
+    level="C1",
+    num_questions=2
+)
+
+output = generate.generate()
+print(output)
