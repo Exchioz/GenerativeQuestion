@@ -1,5 +1,3 @@
-import numpy as np
-
 class Retriever:
     def __init__(self, vector_store, embed):
         self.embed = embed

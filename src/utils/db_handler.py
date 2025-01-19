@@ -1,6 +1,5 @@
 import mysql.connector
 from mysql.connector import Error
-import json
 
 class DBHandler:
     def __init__(self, host: str = None, user: str = None, password: str = None, database: str = None) -> None:
